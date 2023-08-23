@@ -16,7 +16,7 @@ Window root;
 Screen *scr;
 
 int barheight = 19;
-int bargap = 3;
+int bargap = 2;
 int border_width = 2;
 Window barwin;
 
@@ -49,9 +49,8 @@ Window focused;
 
 int layout_no = 0;
 
-#define TOTALKEYS 27
-char keyBindings[TOTALKEYS][2] = {"Q", "D", "M", "J", "K", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "H", "L", "T", "C", "O", "P", "Y", "I", "W", "R", "B","A"};
-
+#define TOTALKEYS 29
+char keyBindings[TOTALKEYS][2] = {"Q", "D", "M", "J", "K", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "H", "L", "T", "C", "O", "P", "Y", "I", "W", "R", "B","A", "N","E"};
 void read_config()
 {
   FILE *fp;
@@ -172,6 +171,28 @@ int remove_window(Window w, unsigned int wor_tag)
   return 1;
 }
 
+
+
+
+int window_exists(Window w, unsigned int wor_tag)
+{
+  // search for a window in a tag and remove the window
+  for (int i = 0; i < pertag_win[wor_tag]; i++)
+  {
+    if (clients[wor_tag][i] == w)
+    {
+      return 1; // the window exists
+    }
+  }
+  return 0; // the window does not exist
+}
+
+
+
+
+
+
+
 int remove_all_instance_of_window(Window w)
 {
   int retvalue;
@@ -241,6 +262,9 @@ void manage_master_stack(unsigned int working_tag)
 
   printf("Total Windows in tag %i : %i\n", working_tag, total_windows_in_this_tag);
 
+
+  XSetInputFocus(display, focused, RevertToParent, CurrentTime);
+
   Colormap cmap = DefaultColormap(display, DefaultScreen(display));
 
   XColor border_color_r, exactColor_r;
@@ -260,6 +284,8 @@ void manage_master_stack(unsigned int working_tag)
 
     if (working == focused)
     {
+      printf("focused : %lu", working);
+
       XSetWindowBorder(display, working, border_color_b.pixel);
       // Set the window border color for focused
     }
@@ -306,7 +332,6 @@ void manage_master_stack(unsigned int working_tag)
   }
 }
 
-//// CREDIT: Utsav Shrestha for implementation of this layout
 void manage_tree(unsigned int working_tag)
 {
   float master = master_size[working_tag];
@@ -337,6 +362,7 @@ void manage_tree(unsigned int working_tag)
 
   printf("Total Windows in tag %i : %i\n", working_tag, total_windows_in_this_tag);
 
+
   struct winInfo w[total_windows_in_this_tag]; // stores the dimension and position of windows in tag
 
   w[0].winH = height; // for master window
@@ -350,16 +376,16 @@ void manage_tree(unsigned int working_tag)
   { // gives each window their required dimensions and position
     if (w[i - 1].winW > w[i - 1].winH)
     {
-      w[i].winW = w[i - 1].winW / 2;
-      w[i - 1].winW /= 2;
+      w[i].winW = w[i - 1].winW *(1-master);
+      w[i - 1].winW *= master;
       w[i].winH = w[i - 1].winH;
       w[i].xpos = w[i - 1].xpos + w[i - 1].winW;
       w[i].ypos = w[i - 1].ypos;
     }
     else
     {
-      w[i].winH = w[i - 1].winH / 2;
-      w[i - 1].winH /= 2;
+      w[i].winH = w[i - 1].winH *(1-master);
+      w[i - 1].winH *= master;
       w[i].winW = w[i - 1].winW;
       w[i].ypos = w[i - 1].ypos + w[i - 1].winH;
       w[i].xpos = w[i - 1].xpos;
@@ -373,6 +399,20 @@ void manage_tree(unsigned int working_tag)
 
     XWindowAttributes atter;
     XGetWindowAttributes(display, working, &atter);
+
+    if (working == focused)
+    {
+      XSetWindowBorder(display, working, border_color_b.pixel);
+      // Set the window border color for focused
+    }
+    else
+    {
+      XSetWindowBorder(display, working, border_color_r.pixel);
+      // Set the window border color unfocused
+    }
+
+    XSetWindowBorderWidth(display, working, border_width);
+
     XMapWindow(display, working);
 
     if (i == 0)
@@ -554,6 +594,68 @@ void manage(unsigned int working_tag)
   }
 }
 
+void change_focus_to_next(unsigned int working_tag)
+{
+  Window temporary = focused;
+  int total_windows_in_this_tag = pertag_win[working_tag];
+  int index;
+
+  printf("\nthe focused window is %lu \n",temporary);
+
+  for(int i=0;i<total_windows_in_this_tag;i++)
+  {
+    if(temporary == clients[working_tag][i])
+    {
+      index = i;
+    }
+  }
+
+  if(index == total_windows_in_this_tag-1) {
+    focused = clients[working_tag][0];
+  }
+  else{
+    focused = clients[working_tag][index+1];
+  }
+
+  manage(working_tag);
+  
+}
+
+void change_focus_to_previous(unsigned int working_tag)
+{
+  Window temporary;
+  int revert;
+  int total_windows_in_this_tag = pertag_win[working_tag];
+  int index,i;
+
+  temporary = focused;
+
+  XGetInputFocus(display,&temporary,&revert);
+
+
+  for(i=0;i<total_windows_in_this_tag;i++)
+  {
+    if(temporary == clients[working_tag][i])
+    {
+      index = i;
+    }
+  }
+
+
+  if(index == 0)
+  {
+    XSetInputFocus(display,clients[working_tag][total_windows_in_this_tag-1],RevertToParent,CurrentTime);
+    focused = clients[working_tag][total_windows_in_this_tag-1];
+  }
+  else
+  {
+    XSetInputFocus(display,clients[working_tag][index-1],RevertToParent,CurrentTime);
+    focused = clients[working_tag][index-1];
+  }
+
+  manage(working_tag);
+}
+
 int wmerror(Display *display, XErrorEvent *ev)
 {
   die("another wm is already here\n");
@@ -604,6 +706,7 @@ void mapevent(const XMapRequestEvent e)
   {
     add_window_to_list(w);
   }
+  focused = w;
   manage(working_tag);
 }
 
@@ -657,7 +760,7 @@ void move_window_to_next_tag(Window w)
 }
 
 // I wrote this macro because typing this out everytime while defining a key was
-// a fucking chore
+// a chore
 // I want this Macro to be used only in the keypress function.
 // I can't gaurrentie it will work anywhere outside this function
 // Dont bring in bugs
@@ -674,7 +777,6 @@ void keypress(const XKeyEvent e)
 
   /* if (e.state & Mod1Mask && */
 
-  // shit this code is ugly as fuck
 
   if (e.state & Mod1Mask)
   {
@@ -752,15 +854,17 @@ void keypress(const XKeyEvent e)
     }
     else if (ISKEY(keyBindings[15]))
     {
-      move_front(e.subwindow, working_tag);
+      //      move_front(e.subwindow, working_tag);
+      move_front(focused, working_tag);
       manage(working_tag);
     }
     else if (ISKEY(keyBindings[16]))
     {
-      move_back(e.subwindow, working_tag);
+      //move_back(e.subwindow, working_tag);
+      move_back(focused, working_tag);
       manage(working_tag);
     }
-    else if (ISKEY(keyBindings[17]))
+    else if (ISKEY(keyBindings[17]) || ISKEY("Return"))
     {
       system("st&");
     }
@@ -817,10 +921,13 @@ void keypress(const XKeyEvent e)
     {
       layout_no = 2;
       manage(working_tag);
+    } else if (ISKEY(keyBindings[27])) { 
+      change_focus_to_next(working_tag);
+    }else if(ISKEY(keyBindings[28])
+    {
+        change_focus_to_previous(working_tag);
     }
-
-
-    
+      
   }
 }
 
@@ -828,20 +935,21 @@ void keypress(const XKeyEvent e)
 /*   Window foc = f.window; */
 /* } */
 
-void motion_event_fn()
+void motion_event_fn(XMotionEvent e)
 {
-  Window hoverWin;
-  int rootX, rootY, winX, winY;
+  /* Window hoverWin; */
+  /* int rootX, rootY, winX, winY; */
 
-  unsigned int mask;
-  XQueryPointer(display, root, &root, &hoverWin, &rootX, &rootY, &winX, &winY, &mask);
+  /* unsigned int mask; */
+  /* XQueryPointer(display, root, &root, &hoverWin, &rootX, &rootY, &winX, &winY, &mask); */
 
-  if (hoverWin != focused)
+  if (e.subwindow != focused)
   {
     printf("focusing\n");
-    XSetInputFocus(display, hoverWin, RevertToParent, CurrentTime);
-    focused = hoverWin;
+    focused = e.subwindow;
+    XSetInputFocus(display, e.subwindow, RevertToParent, CurrentTime);
     XRaiseWindow(display, focused);
+    printf("new focus: %lu\n", focused);
     manage(working_tag);
   }
 }
@@ -874,7 +982,7 @@ int handle_events(XEvent ev)
     printf("focusout event just came, 0x%lx gained focus \n\n\n", ev.xfocus.window);
     break;
   case MotionNotify:
-    motion_event_fn();
+    motion_event_fn(ev.xmotion);
     break;
     /* case EnterNotify: */
     /*   printf("Entered"); */
@@ -899,6 +1007,14 @@ void setkeys()
   {
     MOD1BIND(keyBindings[i]);
   }
+
+
+
+  // Some extra hardcoded binds
+
+  MOD1BIND("Return");
+
+
 }
 
 // Adds mousebutton listeners
@@ -952,8 +1068,7 @@ void *update_bar()
   }
 }
 
-int main()
-{
+int main(){
 
   display = XOpenDisplay(NULL);
 
@@ -1000,4 +1115,4 @@ int main()
   pthread_join(thread, NULL);
 
   return 0;
-} // 469 Nice
+}
